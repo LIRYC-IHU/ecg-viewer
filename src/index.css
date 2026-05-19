@@ -1,0 +1,22 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1d1f21;
+  background: #f3f4f6;
+}
+
+* { box-sizing: border-box; }
+
+body, html, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+select, input[type="checkbox"] {
+  font: inherit;
+}

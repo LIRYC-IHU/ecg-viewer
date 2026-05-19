@@ -1,0 +1,142 @@
+/*
+ * ECGViewer — embeddable styles.
+ *
+ * The viewer is fully driven by CSS custom properties. Override any of the
+ * variables below — on `.ecg-viewer` itself or on any ancestor — to retheme
+ * without touching the renderer.
+ *
+ *   --ecg-bg                background fill
+ *   --ecg-grid-minor        1-mm grid lines
+ *   --ecg-grid-major        5-mm grid lines
+ *   --ecg-label             lead names + column-join bars
+ *   --ecg-trace             ECG trace color
+ *   --ecg-trace-thickness   trace thickness in CSS pixels (e.g. "1px")
+ *   --ecg-accent            calipers, rhythm-strip marker
+ *   --ecg-ui-chip-bg        chip & caliper-label background
+ *   --ecg-ui-chip-border    chip & caliper-label border
+ */
+
+.ecg-viewer {
+  /* Layout */
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+
+  /* Default theme — red ECG paper */
+  --ecg-bg: #fff8f8;
+  --ecg-grid-minor: #f4c4c4;
+  --ecg-grid-major: #d24a4a;
+  --ecg-label: #1a1a1a;
+  --ecg-trace: #000000;
+  --ecg-trace-thickness: 1px;
+  --ecg-accent: #9b1c1c;
+  --ecg-ui-chip-bg: rgba(255, 255, 255, 0.7);
+  --ecg-ui-chip-border: rgba(0, 0, 0, 0.1);
+}
+
+/* ---- Optional preset themes (apply via className) ---- */
+
+.ecg-viewer.ecg-theme-green {
+  --ecg-bg: #f6fbf6;
+  --ecg-grid-minor: #bcd9bc;
+  --ecg-grid-major: #3f8f3f;
+  --ecg-label: #1a1a1a;
+  --ecg-trace: #000000;
+  --ecg-accent: #1c5e1c;
+}
+
+.ecg-viewer.ecg-theme-bw {
+  --ecg-bg: #ffffff;
+  --ecg-grid-minor: #d6d6d6;
+  --ecg-grid-major: #7a7a7a;
+  --ecg-label: #000000;
+  --ecg-trace: #000000;
+  --ecg-accent: #1f3a8a;
+}
+
+/* ---- Internal structure ---- */
+
+.ecg-viewer .ecg-meta {
+  flex-shrink: 0;
+  display: flex;
+  gap: 16px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: #4b5563;
+  background: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ecg-viewer .ecg-meta button {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ecg-viewer .ecg-meta button:hover {
+  color: #1d4ed8;
+}
+
+.ecg-canvas-frame {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  padding: 12px;
+  background: #fafafa;
+  box-sizing: border-box;
+  display: flex;
+}
+
+.ecg-canvas-stage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.ecg-canvas-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.ecg-canvas {
+  display: block;
+}
+
+.ecg-canvas-overlay {
+  position: relative;
+  z-index: 1;
+}
+
+.ecg-canvas-gl {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.ecg-empty,
+.ecg-error {
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.ecg-error {
+  color: #991b1b;
+}
