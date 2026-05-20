@@ -48,6 +48,8 @@ export interface RenderDecoration {
   calipers?: Caliper[];
   preview?: Caliper | null;
   hoveredCaliperId?: string | null;
+  /** Cursor position in canvas-mm; drawn as a dashed vertical guideline. */
+  crosshair?: { x: number; y: number } | null;
 }
 
 interface HitRect {
@@ -80,9 +82,12 @@ interface OverlayParams {
   rhythmBaselineY: number | null;
   rhythmOriginX: number;
   rhythmRowMm: number;
+  /** Total plot height (main rows + rhythm gap + rhythm row) in mm. */
+  plotHeightMm: number;
   calipers: Caliper[];
   previewCaliper: Caliper | null;
   hoveredCaliperId: string | null;
+  crosshair: { x: number; y: number } | null;
 }
 
 /**
@@ -323,9 +328,11 @@ export class EcgRenderer {
       timeScale, amplitudeScale,
       hasRhythmStrip, rhythmLead,
       rhythmBaselineY, rhythmOriginX, rhythmRowMm,
+      plotHeightMm,
       calipers: deco.calipers ?? [],
       previewCaliper: deco.preview ?? null,
       hoveredCaliperId: deco.hoveredCaliperId ?? null,
+      crosshair: deco.crosshair ?? null,
     });
 
     // --- WebGL: traces ---
@@ -455,6 +462,10 @@ export class EcgRenderer {
     this.drawLayoutChip(ctx, p, fontPx);
     this.drawScaleChips(ctx, p, fontPx);
 
+    if (p.crosshair) {
+      this.drawCrosshair(ctx, p.crosshair, p);
+    }
+
     for (const c of p.calipers) {
       this.drawCaliper(ctx, c, pxPerMm, cssWidth, cssHeight, theme,
         p.timeScale, p.amplitudeScale,
@@ -464,6 +475,27 @@ export class EcgRenderer {
       this.drawCaliper(ctx, p.previewCaliper, pxPerMm, cssWidth, cssHeight, theme,
         p.timeScale, p.amplitudeScale, false, true);
     }
+  }
+
+  private drawCrosshair(
+    ctx: CanvasRenderingContext2D,
+    crosshair: { x: number; y: number },
+    p: OverlayParams,
+  ) {
+    const minX = p.leftMarginMm;
+    const maxX = p.leftMarginMm + p.grid.cols * p.segWidthMm;
+    if (crosshair.x < minX || crosshair.x > maxX) return;
+    const xPx = Math.round(crosshair.x * p.pxPerMm) + 0.5;
+    ctx.save();
+    ctx.strokeStyle = p.theme.accent;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(xPx, 0);
+    ctx.lineTo(xPx, p.cssHeight);
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawGrid(

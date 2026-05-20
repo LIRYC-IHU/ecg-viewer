@@ -3,22 +3,46 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "description": "Embeddable React component for displaying DICOM 12-lead Resting ECGs (WebGL, CSS-driven theming).",
+  "main": "./dist-lib/index.cjs",
+  "module": "./dist-lib/index.mjs",
+  "types": "./dist-lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist-lib/index.d.ts",
+      "import": "./dist-lib/index.mjs",
+      "require": "./dist-lib/index.cjs"
+    },
+    "./style.css": "./dist-lib/style.css"
+  },
+  "files": [
+    "dist-lib",
+    "README.md"
+  ],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "scripts": {
     "dev": "concurrently -k -n web,api -c green,blue \"npm:dev:client\" \"npm:dev:server\"",
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "tsc -b && vite build",
+    "build:lib": "vite build --config vite.config.lib.ts",
     "preview": "vite preview",
     "start:server": "tsx server/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc -b"
+  },
+  "peerDependencies": {
+    "react": "^18 || ^19",
+    "react-dom": "^18 || ^19"
   },
   "dependencies": {
     "@fastify/compress": "^7.0.3",
     "@fastify/multipart": "^8.3.0",
     "dicom-parser": "^1.8.21",
-    "fastify": "^4.28.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "fastify": "^4.28.1"
   },
   "devDependencies": {
     "@types/node": "^22.7.4",
@@ -26,8 +50,12 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "concurrently": "^9.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "vite": "^5.4.10",
+    "vite-plugin-dts": "^5.0.1",
+    "vitest": "^4.1.6"
   }
 }

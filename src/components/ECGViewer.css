@@ -60,6 +60,11 @@
   --ecg-accent: #1f3a8a;
 }
 
+.ecg-viewer:fullscreen {
+  border: none;
+  border-radius: 0;
+}
+
 /* ---- Internal structure ---- */
 
 .ecg-viewer .ecg-meta {

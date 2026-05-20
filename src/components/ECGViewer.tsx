@@ -32,8 +32,14 @@ export interface ECGViewerHandle {
   exportPng(): string | null;
   /** Remove all caliper measurements. */
   clearCalipers(): void;
+  /** Undo the most recent caliper change. */
+  undo(): void;
+  /** Redo the most recently undone caliper change. */
+  redo(): void;
   /** Reset zoom (1×) and pan. */
   resetZoom(): void;
+  /** Toggle browser fullscreen on the viewer root element. */
+  toggleFullscreen(): void;
   /** Programmatically update a single option. */
   setOption<K extends keyof ViewerOptions>(key: K, value: ViewerOptions[K]): void;
   /** Read the live options snapshot. */
@@ -53,6 +59,8 @@ const ZOOM_MIN = 1;
 const ZOOM_MAX = 5;
 /** Pixels of pointer travel before a press becomes a drag (vs. a click). */
 const DRAG_THRESHOLD_PX = 5;
+/** How many undo/redo steps to keep in memory. */
+const HISTORY_MAX = 50;
 
 function cycle<T>(arr: readonly T[], current: T): T {
   const i = arr.indexOf(current);
@@ -85,6 +93,8 @@ interface DragState {
   startCss: { x: number; y: number };
   startMm: { x: number; y: number };
   initialCaliper?: Caliper;
+  /** Set true once a move-drag has actually mutated state (so we push history once). */
+  historyPushed?: boolean;
 }
 
 const IDLE_DRAG: DragState = {
@@ -92,6 +102,11 @@ const IDLE_DRAG: DragState = {
   startCss: { x: 0, y: 0 },
   startMm: { x: 0, y: 0 },
 };
+
+interface CaliperHistory {
+  past: Caliper[][];
+  future: Caliper[][];
+}
 
 export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function ECGViewer(
   { record, initialOptions, className, onOptionsChange },
@@ -118,17 +133,21 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
   const [zoomDisplay, setZoomDisplay] = useState(1);
   const [error, setError] = useState<string | null>(null);
 
-  // Caliper state — refs mirror the latest values for use inside event handlers.
+  // Caliper state with refs mirrored for use inside event handlers.
   const [calipers, setCalipers] = useState<Caliper[]>([]);
   const [previewCaliper, setPreviewCaliper] = useState<Caliper | null>(null);
   const [hoveredCaliperId, setHoveredCaliperId] = useState<string | null>(null);
+  const [crosshair, setCrosshair] = useState<{ x: number; y: number } | null>(null);
   const calipersRef = useRef<Caliper[]>([]);
   const previewCaliperRef = useRef<Caliper | null>(null);
   const hoveredCaliperIdRef = useRef<string | null>(null);
+  const crosshairRef = useRef<{ x: number; y: number } | null>(null);
   const dragRef = useRef<DragState>(IDLE_DRAG);
+  const historyRef = useRef<CaliperHistory>({ past: [], future: [] });
   useEffect(() => { calipersRef.current = calipers; }, [calipers]);
   useEffect(() => { previewCaliperRef.current = previewCaliper; }, [previewCaliper]);
   useEffect(() => { hoveredCaliperIdRef.current = hoveredCaliperId; }, [hoveredCaliperId]);
+  useEffect(() => { crosshairRef.current = crosshair; }, [crosshair]);
 
   const applyTransform = useCallback(() => {
     if (!wrapRef.current) return;
@@ -178,6 +197,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
       calipers: calipersRef.current,
       preview: previewCaliperRef.current,
       hoveredCaliperId: hoveredCaliperIdRef.current,
+      crosshair: crosshairRef.current,
     });
     if (!result) return;
     setInfo(result);
@@ -187,10 +207,10 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     applyTransform();
   }, [record, applyTransform]);
 
-  // Re-render on caliper-state change.
+  // Re-render on observable-state change.
   useEffect(() => {
     triggerRender();
-  }, [calipers, previewCaliper, hoveredCaliperId, triggerRender]);
+  }, [calipers, previewCaliper, hoveredCaliperId, crosshair, triggerRender]);
 
   // Reset transient state on data change.
   useEffect(() => {
@@ -200,10 +220,12 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     setCalipers([]);
     setPreviewCaliper(null);
     setHoveredCaliperId(null);
+    setCrosshair(null);
+    historyRef.current = { past: [], future: [] };
     triggerRender();
   }, [record, triggerRender]);
 
-  // Reset zoom on layout / scale changes (preserving calipers).
+  // Reset zoom on layout / scale changes (preserving calipers + history).
   useEffect(() => {
     if (!rendererRef.current) return;
     zoomRef.current = 1;
@@ -213,7 +235,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     triggerRender();
   }, [options, triggerRender]);
 
-  // ResizeObserver on the stage.
+  // Stage resize.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -221,6 +243,52 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     ro.observe(el);
     return () => ro.disconnect();
   }, [triggerRender]);
+
+  // ---------- Caliper history ----------
+  const pushHistory = useCallback((snapshot: Caliper[]) => {
+    const h = historyRef.current;
+    historyRef.current = {
+      past: [...h.past, snapshot].slice(-HISTORY_MAX),
+      future: [],
+    };
+  }, []);
+
+  const undo = useCallback(() => {
+    const h = historyRef.current;
+    if (h.past.length === 0) return;
+    const previous = h.past[h.past.length - 1];
+    historyRef.current = {
+      past: h.past.slice(0, -1),
+      future: [calipersRef.current, ...h.future].slice(0, HISTORY_MAX),
+    };
+    setCalipers(previous);
+    setHoveredCaliperId(null);
+  }, []);
+
+  const redo = useCallback(() => {
+    const h = historyRef.current;
+    if (h.future.length === 0) return;
+    const next = h.future[0];
+    historyRef.current = {
+      past: [...h.past, calipersRef.current].slice(-HISTORY_MAX),
+      future: h.future.slice(1),
+    };
+    setCalipers(next);
+    setHoveredCaliperId(null);
+  }, []);
+
+  // ---------- Fullscreen ----------
+  const toggleFullscreen = useCallback(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    // Both calls return promises that reject without a user gesture or when
+    // already in/out of the requested state — swallow those, they're benign.
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => { /* noop */ });
+    } else {
+      el.requestFullscreen?.().catch(() => { /* noop */ });
+    }
+  }, []);
 
   // ---------- Wheel: zoom (ctrl/cmd) or pan ----------
   useEffect(() => {
@@ -301,7 +369,6 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     };
   }, [applyTransform]);
 
-  // Suppress macOS/Linux middle-click autoscroll cursor.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -310,7 +377,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     return () => el.removeEventListener('auxclick', onAux);
   }, []);
 
-  // ---------- Keyboard delete while hovering a caliper ----------
+  // ---------- Keyboard shortcuts ----------
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (
@@ -318,17 +385,31 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
         e.target instanceof HTMLSelectElement ||
         e.target instanceof HTMLTextAreaElement
       ) return;
+      if (dragRef.current.kind !== 'idle') return;
+      const mod = e.ctrlKey || e.metaKey;
+      const k = e.key.toLowerCase();
+
+      // Undo / redo
+      if (mod && !e.shiftKey && k === 'z') { e.preventDefault(); undo(); return; }
+      if ((mod && e.shiftKey && k === 'z') || (mod && k === 'y')) {
+        e.preventDefault(); redo(); return;
+      }
+
+      // Fullscreen
+      if (!mod && k === 'f') { e.preventDefault(); toggleFullscreen(); return; }
+
+      // Delete the caliper under the cursor
       const id = hoveredCaliperIdRef.current;
-      if (!id) return;
-      if (e.key === 'Delete' || e.key === 'Backspace' || e.key.toLowerCase() === 'd') {
+      if (id && !mod && (e.key === 'Delete' || e.key === 'Backspace' || k === 'd')) {
         e.preventDefault();
+        pushHistory(calipersRef.current);
         setCalipers((arr) => arr.filter((c) => c.id !== id));
         setHoveredCaliperId(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [undo, redo, toggleFullscreen, pushHistory]);
 
   // ---------- Pointer interactions on the overlay canvas ----------
   const updateOption = useCallback(
@@ -373,10 +454,15 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
       const initial = calipersRef.current.find((c) => c.id === caliperHit);
       if (initial) {
         dragRef.current = {
-          kind: 'moving', startCss: { x: cssX, y: cssY }, startMm, initialCaliper: initial,
+          kind: 'moving',
+          startCss: { x: cssX, y: cssY },
+          startMm,
+          initialCaliper: initial,
+          historyPushed: false,
         };
         canvas.setPointerCapture(e.pointerId);
         canvas.style.cursor = 'grabbing';
+        setCrosshair(null);
         return;
       }
     }
@@ -399,6 +485,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
       if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
       drag.kind = 'creating';
       canvas.style.cursor = 'crosshair';
+      setCrosshair(null);
     }
 
     if (drag.kind === 'creating') {
@@ -415,6 +502,11 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     }
 
     if (drag.kind === 'moving' && drag.initialCaliper) {
+      // Snapshot the pre-move state on the very first effective move.
+      if (!drag.historyPushed) {
+        pushHistory(calipersRef.current);
+        drag.historyPushed = true;
+      }
       const cur = renderer.cssToCanvasMm(cssX, cssY);
       const dxMm = cur.x - drag.startMm.x;
       const dyMm = cur.y - drag.startMm.y;
@@ -432,17 +524,25 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
       return;
     }
 
-    // Idle: hover + cursor
+    // Idle — update hover, cursor, and crosshair
     const calHit = renderer.hitTestCaliperLabel(cssX, cssY);
     if (calHit !== hoveredCaliperIdRef.current) setHoveredCaliperId(calHit);
     if (calHit) {
       canvas.style.cursor = 'grab';
+      if (crosshairRef.current !== null) setCrosshair(null);
     } else {
       const hit = renderer.hitTest(cssX, cssY);
       const isLeadIn12x1 = hit?.kind === 'lead' && optionsRef.current.layout === '12x1';
-      canvas.style.cursor = hit && !isLeadIn12x1 ? 'pointer' : 'crosshair';
+      if (hit && !isLeadIn12x1) {
+        canvas.style.cursor = 'pointer';
+        if (crosshairRef.current !== null) setCrosshair(null);
+      } else {
+        canvas.style.cursor = 'crosshair';
+        const mmPos = renderer.cssToCanvasMm(cssX, cssY);
+        setCrosshair({ x: mmPos.x, y: mmPos.y });
+      }
     }
-  }, []);
+  }, [pushHistory]);
 
   const pointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (e.button !== 0) return;
@@ -453,6 +553,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     } else if (drag.kind === 'creating') {
       const preview = previewCaliperRef.current;
       if (preview) {
+        pushHistory(calipersRef.current);
         const id = `cal-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
         setCalipers((arr) => [...arr, { ...preview, id }]);
       }
@@ -460,11 +561,12 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     }
     dragRef.current = IDLE_DRAG;
     try { canvas.releasePointerCapture(e.pointerId); } catch { /* noop */ }
-  }, [handleStaticClick]);
+  }, [handleStaticClick, pushHistory]);
 
   const pointerLeave = useCallback(() => {
     if (dragRef.current.kind !== 'idle') return;
     if (hoveredCaliperIdRef.current !== null) setHoveredCaliperId(null);
+    if (crosshairRef.current !== null) setCrosshair(null);
   }, []);
 
   const resetZoom = useCallback(() => {
@@ -475,20 +577,25 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
   }, [triggerRender]);
 
   const clearCalipers = useCallback(() => {
+    if (calipersRef.current.length === 0) return;
+    pushHistory(calipersRef.current);
     setCalipers([]);
     setPreviewCaliper(null);
     setHoveredCaliperId(null);
-  }, []);
+  }, [pushHistory]);
 
   // ---------- Imperative ref API ----------
   useImperativeHandle(ref, () => ({
     exportPng: () => rendererRef.current?.exportPng() ?? null,
     clearCalipers,
+    undo,
+    redo,
     resetZoom,
+    toggleFullscreen,
     setOption: (key, value) => updateOption(key, value),
     getOptions: () => optionsRef.current,
     refresh: () => triggerRender(),
-  }), [clearCalipers, resetZoom, updateOption, triggerRender]);
+  }), [clearCalipers, undo, redo, resetZoom, toggleFullscreen, updateOption, triggerRender]);
 
   const headerInfo = useMemo(() => {
     if (!record) return null;

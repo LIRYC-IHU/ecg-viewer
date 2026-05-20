@@ -61,8 +61,10 @@ ecg-viewer/
 
 ```bash
 npm install
-npm run dev      # both client (5173) and server (3001) via concurrently
-npm run build    # production build of the SPA (server runs from source via tsx)
+npm run dev        # both client (5173) and server (3001) via concurrently
+npm run build      # production build of the demo SPA
+npm run build:lib  # library build for npm publishing (dist-lib/)
+npm run test       # vitest (parser, wire format, layouts)
 npm run typecheck
 ```
 
@@ -124,8 +126,11 @@ function Demo() {
 | Method | Notes |
 | --- | --- |
 | `exportPng(): string \| null` | Returns the current view as a `data:image/png;base64,...` URL. |
-| `clearCalipers(): void` | Remove all caliper measurements. |
+| `clearCalipers(): void` | Remove all caliper measurements (pushes to history — undoable). |
+| `undo(): void` | Undo the most recent caliper change. |
+| `redo(): void` | Redo the most recently undone caliper change. |
 | `resetZoom(): void` | Reset zoom to 1× and re-center. |
+| `toggleFullscreen(): void` | Toggle browser fullscreen on the viewer root. |
 | `setOption(key, value): void` | Programmatically change a single `ViewerOptions` entry. |
 | `getOptions(): ViewerOptions` | Read the live options snapshot. |
 | `refresh(): void` | Re-read CSS theme variables and redraw. Call after live CSS changes. |
@@ -255,12 +260,15 @@ derivation logic as `server/parseDicomEcg.ts:deriveLead`.
 | Cycle time scale | Click bottom-right `25 mm/s` chip |
 | Cycle amplitude scale | Click bottom-right `10 mm/mV` chip |
 | Set rhythm-strip lead | Click any lead label (in 6 × 2 / 3 × 4) |
+| Time crosshair | Move the cursor inside the plot — a dashed vertical guide tracks it across all simultaneously-recorded rows |
 | Zoom (centered on cursor) | <kbd>ctrl</kbd> or <kbd>⌘</kbd> + mouse wheel / trackpad pinch |
 | Pan (when zoomed) | Two-finger trackpad swipe or middle-mouse drag |
 | Reset zoom | "réinitialiser" link in the meta bar |
+| Toggle fullscreen | <kbd>F</kbd> (or `ref.current.toggleFullscreen()`) |
 | Create caliper | Click-drag in the trace area (mode follows drag direction) |
 | Move caliper | Click-drag its value label |
 | Delete caliper | Hover the label, press <kbd>D</kbd> / <kbd>Delete</kbd> / <kbd>Backspace</kbd> |
+| Undo / redo | <kbd>ctrl/⌘+Z</kbd> · <kbd>ctrl/⌘+⇧+Z</kbd> or <kbd>ctrl/⌘+Y</kbd> |
 | Export PNG | Via `ref.current.exportPng()` (the demo app provides a button) |
 
 ## Implementation notes

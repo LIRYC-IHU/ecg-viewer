@@ -106,9 +106,10 @@ export default function App() {
 
       <footer className="app-footer">
         <span>
-          Astuce : <kbd>ctrl/⌘+molette</kbd> pour zoomer ·{' '}
-          <kbd>swipe trackpad</kbd> ou <kbd>clic-milieu</kbd> pour déplacer ·{' '}
-          glisser dans le tracé pour mesurer · <kbd>D</kbd> pour supprimer une mesure
+          <kbd>ctrl/⌘+molette</kbd> zoom · <kbd>swipe trackpad</kbd> ou{' '}
+          <kbd>clic-milieu</kbd> pan · <em>drag</em> dans le tracé pour mesurer ·{' '}
+          <kbd>D</kbd> supprime la mesure survolée · <kbd>ctrl/⌘+Z</kbd> /{' '}
+          <kbd>ctrl/⌘+⇧+Z</kbd> undo/redo · <kbd>F</kbd> plein écran
         </span>
       </footer>
     </div>
