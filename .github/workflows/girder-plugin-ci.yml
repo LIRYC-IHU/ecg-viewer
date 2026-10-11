@@ -55,6 +55,25 @@ jobs:
           pip install "girder>=5" pytest pytest-girder
           pip install -e ./girder-plugin
 
+      - name: Install the ecg-bridge converters
+        # Vendor formats are converted with the ecg-bridge release binaries;
+        # the tests run a real conversion with them.
+        env:
+          ECG_BRIDGE_VERSION: '1.4.0'
+        run: |
+          base="https://github.com/LIRYC-IHU/ecg-bridge/releases/download/v${ECG_BRIDGE_VERSION}"
+          tarball="ecg-bridge_v${ECG_BRIDGE_VERSION}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$tarball"
+          curl -fsSLO "$base/checksums.txt"
+          grep " $tarball\$" checksums.txt | sha256sum -c -
+          mkdir -p ecg-bridge
+          tar -xzf "$tarball" --strip-components=1 -C ecg-bridge --wildcards '*-to-dicom'
+          echo "ECG_BRIDGE_PATH=$RUNNER_TEMP/ecg-bridge" >> "$GITHUB_ENV"
+
       - name: Run the plugin test suite
         working-directory: girder-plugin
+        env:
+          # A missing converter fails the conversion tests instead of skipping them.
+          ECG_VIEWER_REQUIRE_CONVERTERS: '1'
         run: pytest -q plugin_tests --mongo-uri mongodb://localhost:27017

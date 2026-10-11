@@ -7,6 +7,7 @@ API=${API:-http://localhost:8089/api/v1}
 LOGIN=${GIRDER_ADMIN_LOGIN:-admin}
 PASSWORD=${GIRDER_ADMIN_PASSWORD:-ecg-viewer-dev}
 SAMPLES="$(cd "$(dirname "$0")/../../server/samples" && pwd)"
+AECG="$(cd "$(dirname "$0")/../plugin_tests/data" && pwd)/aecg.xml"
 
 json() { python3 -c "import json,sys; print(json.load(sys.stdin)$1)"; }
 
@@ -52,6 +53,12 @@ for f in "$SAMPLES"/*.dcm; do
     upload "$id" "$f" "$name"
   fi
 done
+
+# A vendor format, converted to DICOM on the fly by ecg-bridge.
+fda=$(item "FDA aECG")
+if [ "$(curl -sf "${H[@]}" "$API/item/$fda/files" | json '.__len__()')" = 0 ]; then
+  upload "$fda" "$AECG" "ecg-aecg.xml"
+fi
 
 # One item with several ECGs plus a non-ECG file, and one with no ECG at all.
 multi=$(item "Several ECGs")

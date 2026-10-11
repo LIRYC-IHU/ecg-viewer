@@ -70,3 +70,8 @@
   color: #a94442;
   background: #f2dede;
 }
+
+.g-ecg-viewer-format {
+  flex-shrink: 0;
+  font-weight: normal;
+}

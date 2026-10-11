@@ -1,0 +1,11 @@
+# Build context is the repository root; keep it to what the image needs.
+**/node_modules
+.git
+.claude
+assets
+dist
+dist-lib
+girder-plugin/build
+girder-plugin/dist
+**/*.egg-info
+**/__pycache__

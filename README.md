@@ -74,8 +74,10 @@ header to switch between the bundled sample files or upload your own `.dcm`.
 ## Girder plugin
 
 [`girder-plugin/`](girder-plugin/) packages the viewer as a **Girder 5**
-plugin: item pages holding a DICOM ECG get an ECG section with the full viewer
-(calipers, zoom, layouts, PNG export). Install the wheel from the
+plugin: item pages holding an ECG get an ECG section with the full viewer
+(calipers, zoom, layouts, PNG export). Besides DICOM, vendor formats (FDA aECG,
+Philips, GE MUSE, Mindray, Nihon Kohden, Fukuda) are converted on the fly with
+[ecg-bridge](https://github.com/LIRYC-IHU/ecg-bridge). Install the wheel from the
 [releases](https://github.com/LIRYC-IHU/ecg-viewer/releases) (`girder-v*`
 tags) — see [girder-plugin/README.md](girder-plugin/README.md).
 

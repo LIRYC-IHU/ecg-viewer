@@ -2,6 +2,8 @@ from pathlib import Path
 
 from girder.plugin import GirderPlugin, registerPluginStaticContent
 
+from . import rest
+
 WEB_CLIENT_DIST = Path(__file__).parent / 'web_client' / 'dist'
 
 
@@ -9,10 +11,11 @@ class EcgViewerPlugin(GirderPlugin):
     DISPLAY_NAME = 'ECG Viewer'
 
     def load(self, info):
-        # Everything happens in the browser: the client sniffs the item's files
-        # for an ECG SOP class, downloads the DICOM through the regular file
-        # endpoints (so Girder's access control applies as-is) and parses it
-        # locally. The server only has to serve the bundle.
+        # The server recognises ECG files and hands them to the browser as
+        # DICOM, converting vendor formats with ecg-bridge on the fly; the
+        # browser parses the DICOM and renders it.
+        rest.addRoutes(info['apiRoot'])
+
         registerPluginStaticContent(
             plugin='ecg_viewer',
             css=['/style.css'],

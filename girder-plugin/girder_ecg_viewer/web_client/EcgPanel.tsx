@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ECGViewer, type ECGViewerHandle } from '../../../src/components/ECGViewer';
 import type { EcgRecord } from '../../../shared/ecgTypes';
-import { downloadUrl, loadEcg } from './girderApi';
-import { ECG_SOP_CLASSES, type EcgSopClassUid } from './sniff';
-
-export interface EcgFile {
-  id: string;
-  name: string;
-  sopClass: EcgSopClassUid;
-}
+import { downloadUrl, loadEcg, type EcgFile } from './girderApi';
 
 type LoadState =
   | { status: 'loading' }
@@ -31,16 +24,16 @@ function saveDataUrl(url: string, name: string): void {
 
 /** The ECG section shown on a Girder item page. */
 export function EcgPanel({ files }: { files: EcgFile[] }) {
-  const [selectedId, setSelectedId] = useState(files[0].id);
+  const [selectedId, setSelectedId] = useState(files[0]._id);
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const viewerRef = useRef<ECGViewerHandle>(null);
 
-  const selected = files.find((f) => f.id === selectedId) ?? files[0];
+  const selected = files.find((f) => f._id === selectedId) ?? files[0];
 
   useEffect(() => {
     const ctrl = new AbortController();
     setState({ status: 'loading' });
-    loadEcg(selected.id, ctrl.signal).then(
+    loadEcg(selected._id, ctrl.signal).then(
       (record) => setState({ status: 'ready', record }),
       (err: unknown) => {
         if (ctrl.signal.aborted) return;
@@ -51,7 +44,7 @@ export function EcgPanel({ files }: { files: EcgFile[] }) {
       },
     );
     return () => ctrl.abort();
-  }, [selected.id]);
+  }, [selected._id]);
 
   const ready = state.status === 'ready';
 
@@ -65,18 +58,22 @@ export function EcgPanel({ files }: { files: EcgFile[] }) {
         {files.length > 1 ? (
           <select
             className="g-ecg-viewer-file-select form-control input-sm"
-            value={selected.id}
+            value={selected._id}
             onChange={(e) => setSelectedId(e.target.value)}
           >
             {files.map((f) => (
-              <option key={f.id} value={f.id}>{f.name}</option>
+              <option key={f._id} value={f._id}>{f.name}</option>
             ))}
           </select>
         ) : (
-          <span className="g-ecg-viewer-file-name" title={ECG_SOP_CLASSES[selected.sopClass]}>
-            {selected.name}
-          </span>
+          <span className="g-ecg-viewer-file-name">{selected.name}</span>
         )}
+        <span
+          className="g-ecg-viewer-format label label-default"
+          title={selected.converted ? 'Converted to DICOM on the server with ecg-bridge' : undefined}
+        >
+          {selected.formatLabel}
+        </span>
         <div className="g-ecg-viewer-actions btn-group btn-group-sm">
           <button
             type="button"
@@ -110,8 +107,8 @@ export function EcgPanel({ files }: { files: EcgFile[] }) {
           </button>
           <a
             className="btn btn-default g-ecg-download"
-            title="Download the DICOM file"
-            href={downloadUrl(selected.id)}
+            title="Download the original file"
+            href={downloadUrl(selected._id)}
           >
             <i className="icon-download" />
           </a>
@@ -128,7 +125,7 @@ export function EcgPanel({ files }: { files: EcgFile[] }) {
             <i className="icon-attention" /> Could not display this ECG: {state.message}
           </div>
         )}
-        {ready && <ECGViewer key={selected.id} ref={viewerRef} record={state.record} />}
+        {ready && <ECGViewer key={selected._id} ref={viewerRef} record={state.record} />}
       </div>
     </>
   );

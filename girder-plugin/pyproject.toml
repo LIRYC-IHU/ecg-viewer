@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "girder-ecg-viewer"
-version = "0.1.0"
-description = "Display DICOM 12-lead ECGs on Girder item pages (WebGL viewer, calipers, PNG export)."
+version = "0.2.0"
+description = "Display ECGs on Girder item pages: DICOM, plus vendor formats converted on the fly with ecg-bridge."
 readme = "README.md"
 license = {text = "Apache 2.0"}
 authors = [
     {name = "Josselin Duchateau"},
 ]
-keywords = ["girder", "ecg", "dicom", "waveform", "viewer"]
+keywords = ["girder", "ecg", "dicom", "aecg", "waveform", "viewer"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: Apache Software License",
