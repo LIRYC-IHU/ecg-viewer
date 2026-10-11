@@ -68,7 +68,7 @@ jobs:
           curl -fsSLO "$base/checksums.txt"
           grep " $tarball\$" checksums.txt | sha256sum -c -
           mkdir -p ecg-bridge
-          tar -xzf "$tarball" --strip-components=1 -C ecg-bridge --wildcards '*-to-dicom'
+          tar -xzf "$tarball" --strip-components=1 -C ecg-bridge --wildcards '*-to-dicom' '*-to-fda'
           echo "ECG_BRIDGE_PATH=$RUNNER_TEMP/ecg-bridge" >> "$GITHUB_ENV"
 
       - name: Run the plugin test suite

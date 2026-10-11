@@ -4,7 +4,7 @@ import pathlib
 
 import pytest
 
-from girder_ecg_viewer.formats import HEAD_BYTES, detectFormat, isCandidate
+from girder_ecg_viewer.formats import HEAD_BYTES, detectFormat, exportName, isCandidate
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 DATA = pathlib.Path(__file__).resolve().parent / 'data'
@@ -73,3 +73,16 @@ def test_candidates():
     assert not isCandidate(f('ecg.dcm', size=0))
     assert not isCandidate(f('ecg.dcm', size=10**9))
     assert not isCandidate({'name': 'ecg.dcm', 'size': 1000, 'linkUrl': 'http://x'})
+
+
+@pytest.mark.parametrize('name, target, expected', [
+    ('ecg.dcm', 'fda', 'ecg.xml'),
+    ('ecg.xml', 'dicom', 'ecg.dcm'),
+    ('00000005.DAT', 'fda', '00000005.xml'),
+    ('ecg.dcm', 'dicom', 'ecg.dcm'),
+    ('IM0001', 'dicom', 'IM0001.dcm'),
+    ('1.2.840.113619.2.55.3', 'fda', '1.2.840.113619.2.55.3.xml'),
+    ('12lead_data_v1', 'fda', '12lead_data_v1.xml'),
+])
+def test_export_names(name, target, expected):
+    assert exportName(name, target) == expected

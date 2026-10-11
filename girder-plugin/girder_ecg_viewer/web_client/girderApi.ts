@@ -21,7 +21,16 @@ export interface EcgFile {
   formatLabel: string;
   /** True when the server converts the file to DICOM with ecg-bridge. */
   converted: boolean;
+  /** Formats the file can be downloaded as (`dicom`, `fda`). */
+  exports: ExportFormat[];
 }
+
+export type ExportFormat = 'dicom' | 'fda';
+
+export const EXPORT_LABELS: Record<ExportFormat, string> = {
+  dicom: 'DICOM (.dcm)',
+  fda: 'FDA HL7 aECG (.xml)',
+};
 
 function apiUrl(path: string): string {
   return `${girder.rest.getApiRoot()}/${path}`;
@@ -30,6 +39,11 @@ function apiUrl(path: string): string {
 /** Plain download of the original file (for the download button). */
 export function downloadUrl(fileId: string): string {
   return apiUrl(`file/${encodeURIComponent(fileId)}/download`);
+}
+
+/** Download as DICOM or FDA aECG XML, converted server-side if needed. */
+export function exportUrl(fileId: string, format: ExportFormat): string {
+  return apiUrl(`file/${encodeURIComponent(fileId)}/ecg/download?format=${format}`);
 }
 
 async function get(path: string, signal?: AbortSignal): Promise<Response> {

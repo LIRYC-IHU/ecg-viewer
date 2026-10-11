@@ -2,7 +2,7 @@
 ARG GIRDER_IMAGE=girder/girder:v5.0.9-py3
 FROM ${GIRDER_IMAGE}
 
-# ecg-bridge converters (vendor ECG formats → DICOM), checksum-verified.
+# ecg-bridge converters (ECG formats → DICOM and FDA aECG), checksum-verified.
 ARG ECG_BRIDGE_VERSION=1.4.0
 ARG TARGETARCH=amd64
 RUN set -eux; \
@@ -12,7 +12,7 @@ RUN set -eux; \
     curl -fsSLO "$base/$tarball"; curl -fsSLO "$base/checksums.txt"; \
     grep " $tarball\$" checksums.txt | sha256sum -c -; \
     mkdir -p /opt/ecg-bridge/bin; \
-    tar -xzf "$tarball" --strip-components=1 -C /opt/ecg-bridge/bin --wildcards '*-to-dicom'; \
+    tar -xzf "$tarball" --strip-components=1 -C /opt/ecg-bridge/bin --wildcards '*-to-dicom' '*-to-fda'; \
     rm "$tarball" checksums.txt
 ENV ECG_BRIDGE_PATH=/opt/ecg-bridge/bin
 

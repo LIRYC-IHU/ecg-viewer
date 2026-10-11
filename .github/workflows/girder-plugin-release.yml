@@ -102,7 +102,8 @@ jobs:
           Girder 5 plugin displaying ECGs on item pages: DICOM, plus vendor formats
           (FDA aECG, Philips, GE MUSE, Mindray, Nihon Kohden, Fukuda) converted on the fly
           with [ecg-bridge](https://github.com/LIRYC-IHU/ecg-bridge) when its \`*-to-dicom\`
-          binaries are on the server (\`PATH\` or \`ECG_BRIDGE_PATH\`).
+          binaries are on the server (\`PATH\` or \`ECG_BRIDGE_PATH\`). ECGs can be downloaded
+          as DICOM or FDA HL7 aECG XML (\`*-to-fda\` binaries).
 
           Install into the Python environment running Girder 5, then restart Girder:
 

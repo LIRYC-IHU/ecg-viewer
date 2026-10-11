@@ -2,7 +2,8 @@
 
 DICOM ECGs are handed to the browser as they are; every other format is
 converted to DICOM by the matching ecg-bridge CLI (see ``convert.py``), so the
-viewer only ever parses DICOM.
+viewer only ever parses DICOM. Files can also be downloaded as DICOM or as FDA
+HL7 aECG XML, whatever their source format.
 """
 
 import dataclasses
@@ -16,23 +17,41 @@ MAX_ECG_BYTES = 64 * 1024 * 1024
 
 
 @dataclasses.dataclass(frozen=True)
+class ExportTarget:
+    key: str
+    label: str
+    extension: str
+    mimeType: str
+
+
+#: Formats a file can be downloaded as. Each is also a source format (below).
+TARGETS = {t.key: t for t in (
+    ExportTarget('dicom', 'DICOM', '.dcm', 'application/dicom'),
+    ExportTarget('fda', 'FDA HL7 aECG (XML)', '.xml', 'application/xml'),
+)}
+
+
+@dataclasses.dataclass(frozen=True)
 class EcgFormat:
     key: str
     label: str
-    #: ecg-bridge CLI converting this format to DICOM; None for DICOM itself.
-    converter: str | None = None
-    #: Extension the converter expects on its input file.
-    inputExtension: str = ''
+    #: Extension the ecg-bridge CLIs expect on an input file of this format.
+    inputExtension: str
+    #: ecg-bridge CLI converting this format to each target format.
+    converters: dict = dataclasses.field(default_factory=dict)
 
 
 FORMATS = {f.key: f for f in (
-    EcgFormat('dicom', 'DICOM ECG'),
-    EcgFormat('fda', 'FDA HL7 aECG', 'fda-to-dicom', '.xml'),
-    EcgFormat('philips', 'Philips SierraECG', 'philips-to-dicom', '.xml'),
-    EcgFormat('muse', 'GE MUSE', 'muse-to-dicom', '.xml'),
-    EcgFormat('nk', 'Nihon Kohden', 'nk-to-dicom', '.dat'),
-    EcgFormat('fukuda', 'Fukuda Denshi', 'fukuda-to-dicom', '.ecg'),
-    EcgFormat('mindray', 'Mindray BeneHeart', 'mindray-to-dicom', '.pat'),
+    EcgFormat('dicom', 'DICOM ECG', '.dcm', {'fda': 'dicom-to-fda'}),
+    EcgFormat('fda', 'FDA HL7 aECG', '.xml', {'dicom': 'fda-to-dicom'}),
+    EcgFormat('philips', 'Philips SierraECG', '.xml',
+              {'dicom': 'philips-to-dicom', 'fda': 'philips-to-fda'}),
+    EcgFormat('muse', 'GE MUSE', '.xml', {'dicom': 'muse-to-dicom', 'fda': 'muse-to-fda'}),
+    EcgFormat('nk', 'Nihon Kohden', '.dat', {'dicom': 'nk-to-dicom', 'fda': 'nk-to-fda'}),
+    EcgFormat('fukuda', 'Fukuda Denshi', '.ecg',
+              {'dicom': 'fukuda-to-dicom', 'fda': 'fukuda-to-fda'}),
+    EcgFormat('mindray', 'Mindray BeneHeart', '.pat',
+              {'dicom': 'mindray-to-dicom', 'fda': 'mindray-to-fda'}),
 )}
 
 # 12-lead, General and Ambulatory ECG waveform storage. The UID must stand on
@@ -85,6 +104,19 @@ def _xmlRoot(head):
     if not match:
         return None
     return match.group(1).rpartition(':')[2]
+
+
+def exportName(name, target):
+    """Download name of a file converted to a target format.
+
+    A recognised ECG extension is replaced (``ecg.DAT`` → ``ecg.xml``); any
+    other name only gets the new one appended, so that UID-style names
+    (``1.2.840.….3``) keep their last component.
+    """
+    stem, dot, ext = name.rpartition('.')
+    if dot and stem and ext.lower() in _CANDIDATE_EXTENSIONS:
+        name = stem
+    return name + TARGETS[target].extension
 
 
 def detectFormat(name, head):

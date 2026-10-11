@@ -1,8 +1,9 @@
-"""On-the-fly conversion of vendor ECG files to DICOM with ecg-bridge.
+"""On-the-fly conversion of ECG files with ecg-bridge.
 
-The ecg-bridge ``*-to-dicom`` CLIs (https://github.com/LIRYC-IHU/ecg-bridge)
-are looked up in ``$ECG_BRIDGE_PATH`` (a PATH-style list of directories) and
-then on ``$PATH``. A format whose converter is missing is simply not offered.
+The ecg-bridge ``*-to-dicom`` and ``*-to-fda`` CLIs
+(https://github.com/LIRYC-IHU/ecg-bridge) are looked up in
+``$ECG_BRIDGE_PATH`` (a PATH-style list of directories) and then on ``$PATH``.
+A conversion whose CLI is missing is simply not offered.
 """
 
 import os
@@ -13,7 +14,7 @@ import tempfile
 
 from girder.models.file import File
 
-from .formats import FORMATS
+from .formats import FORMATS, TARGETS
 
 #: Seconds a single conversion may take.
 CONVERSION_TIMEOUT = 60
@@ -23,30 +24,42 @@ class ConversionError(Exception):
     pass
 
 
-def converterPath(formatKey):
-    """Absolute path of the converter for a format, or None if unavailable."""
-    name = FORMATS[formatKey].converter
+def converterPath(source, target):
+    """Absolute path of the CLI converting ``source`` to ``target``, or None."""
+    name = FORMATS[source].converters.get(target)
     if name is None:
         return None
     extra = os.environ.get('ECG_BRIDGE_PATH')
     return (extra and shutil.which(name, path=extra)) or shutil.which(name)
 
 
+def canConvert(source, target):
+    """Whether a file of format ``source`` can be served as ``target``."""
+    return source == target or converterPath(source, target) is not None
+
+
 def isSupported(formatKey):
-    return formatKey == 'dicom' or converterPath(formatKey) is not None
+    """Whether files of this format can be shown in the viewer (as DICOM)."""
+    return canConvert(formatKey, 'dicom')
 
 
-def toDicom(formatKey, file):
-    """Convert a Girder file of the given format; return the DICOM bytes."""
-    fmt = FORMATS[formatKey]
-    exe = converterPath(formatKey)
+def exportTargets(formatKey):
+    """Keys of the formats a file of this format can be downloaded as."""
+    return [target for target in TARGETS if canConvert(formatKey, target)]
+
+
+def convert(source, target, file):
+    """Convert a Girder file from ``source`` to ``target`` format; return the bytes."""
+    fmt = FORMATS[source]
+    exe = converterPath(source, target)
     if exe is None:
-        raise ConversionError(f'No converter installed for {fmt.label} files.')
+        raise ConversionError(
+            f'No converter installed from {fmt.label} to {TARGETS[target].label}.')
 
     with tempfile.TemporaryDirectory(prefix='girder-ecg-viewer-') as tmp:
-        # The XML converters insist on a .xml input and a .dcm output.
+        # Several CLIs check extensions: .xml / .dcm inputs, .dcm / .xml outputs.
         src = pathlib.Path(tmp) / f'input{fmt.inputExtension}'
-        out = pathlib.Path(tmp) / 'output.dcm'
+        out = pathlib.Path(tmp) / f'output{TARGETS[target].extension}'
         with src.open('wb') as fh:
             for chunk in File().download(file, headers=False)():
                 fh.write(chunk)
@@ -59,11 +72,13 @@ def toDicom(formatKey, file):
                 stdin=subprocess.DEVNULL, capture_output=True,
                 timeout=CONVERSION_TIMEOUT, check=False)
         except subprocess.TimeoutExpired:
-            raise ConversionError(f'{fmt.label} conversion timed out.') from None
+            raise ConversionError(
+                f'{fmt.label} to {TARGETS[target].label} conversion timed out.') from None
 
         if proc.returncode != 0 or not out.is_file():
             raise ConversionError(
-                f'{fmt.label} conversion failed: {_errorDetail(proc)}')
+                f'{fmt.label} to {TARGETS[target].label} conversion failed: '
+                f'{_errorDetail(proc)}')
         return out.read_bytes()
 
 

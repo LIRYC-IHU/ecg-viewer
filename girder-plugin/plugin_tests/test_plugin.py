@@ -17,8 +17,9 @@ DICOM_SAMPLE = REPO / 'server' / 'samples' / '1.dcm'
 # CI installs the ecg-bridge converters and sets this, so a missing converter
 # fails the run instead of silently skipping the conversion tests.
 requiresConverter = pytest.mark.skipif(
-    convert.converterPath('fda') is None and not os.environ.get('ECG_VIEWER_REQUIRE_CONVERTERS'),
-    reason='ecg-bridge fda-to-dicom not installed')
+    not (convert.converterPath('fda', 'dicom') and convert.converterPath('dicom', 'fda'))
+    and not os.environ.get('ECG_VIEWER_REQUIRE_CONVERTERS'),
+    reason='ecg-bridge fda-to-dicom / dicom-to-fda not installed')
 
 
 def test_plugin_registered():
@@ -69,12 +70,14 @@ def _listed(server, item, user):
 
 @pytest.mark.plugin('ecg_viewer')
 def test_list_without_converters(server, admin, ecgItem, monkeypatch):
-    monkeypatch.setattr(convert, 'converterPath', lambda key: None)
+    monkeypatch.setattr(convert, 'converterPath', lambda source, target: None)
     item, files = ecgItem
     listed = _listed(server, item, admin)
     assert list(listed) == ['rest.dcm']
     assert listed['rest.dcm']['format'] == 'dicom'
     assert listed['rest.dcm']['converted'] is False
+    # Without dicom-to-fda, a DICOM can still be downloaded as itself.
+    assert listed['rest.dcm']['exports'] == ['dicom']
 
 
 @pytest.mark.plugin('ecg_viewer')
@@ -109,6 +112,8 @@ def test_fda_aecg_is_listed_and_converted(server, admin, ecgItem):
     assert sorted(listed) == ['aecg.xml', 'rest.dcm']
     assert listed['aecg.xml']['format'] == 'fda'
     assert listed['aecg.xml']['converted'] is True
+    assert listed['aecg.xml']['exports'] == ['dicom', 'fda']
+    assert listed['rest.dcm']['exports'] == ['dicom', 'fda']
 
     resp = server.request(f'/file/{files["aecg.xml"]["_id"]}/ecg', user=admin, isJson=False)
     assertStatusOk(resp)
@@ -131,6 +136,53 @@ def test_conversion_failure_is_reported(server, admin, fsAssetstore):
     resp = server.request(f'/file/{file["_id"]}/ecg', user=admin)
     assertStatus(resp, 400)
     message = resp.json['message']
-    assert message.startswith('FDA HL7 aECG conversion failed: ')
+    assert message.startswith('FDA HL7 aECG to DICOM conversion failed: ')
     assert 'XML syntax error' in message
     assert 'Usage:' not in message
+
+
+def _download(server, file, format, user):
+    return server.request(f'/file/{file["_id"]}/ecg/download', params={'format': format},
+                          user=user, isJson=False)
+
+
+@pytest.mark.plugin('ecg_viewer')
+def test_download_in_own_format_is_unchanged(server, admin, ecgItem):
+    item, files = ecgItem
+    resp = _download(server, files['rest.dcm'], 'dicom', admin)
+    assertStatusOk(resp)
+    assert resp.headers['Content-Type'] == 'application/dicom'
+    assert 'filename="rest.dcm"' in resp.headers['Content-Disposition']
+    assert resp.headers['Content-Disposition'].startswith('attachment')
+    assert getResponseBody(resp, text=False) == DICOM_SAMPLE.read_bytes()
+
+
+@requiresConverter
+@pytest.mark.plugin('ecg_viewer')
+def test_download_dicom_as_fda(server, admin, ecgItem):
+    item, files = ecgItem
+    resp = _download(server, files['rest.dcm'], 'fda', admin)
+    assertStatusOk(resp)
+    assert resp.headers['Content-Type'] == 'application/xml'
+    assert 'filename="rest.xml"' in resp.headers['Content-Disposition']
+    body = getResponseBody(resp, text=False)
+    assert b'<AnnotatedECG' in body[:1024]
+
+
+@requiresConverter
+@pytest.mark.plugin('ecg_viewer')
+def test_download_fda_as_dicom(server, admin, ecgItem):
+    item, files = ecgItem
+    resp = _download(server, files['aecg.xml'], 'dicom', admin)
+    assertStatusOk(resp)
+    assert 'filename="aecg.dcm"' in resp.headers['Content-Disposition']
+    assert getResponseBody(resp, text=False)[128:132] == b'DICM'
+
+
+@pytest.mark.plugin('ecg_viewer')
+def test_download_refusals(server, admin, user, ecgItem):
+    item, files = ecgItem
+    assertStatus(_download(server, files['rest.dcm'], 'pdf', admin), 400)
+    resp = _download(server, files['notes.txt'], 'dicom', admin)
+    assertStatus(resp, 400)
+    assertStatus(_download(server, files['rest.dcm'], 'dicom', user), 403)

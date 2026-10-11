@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { ECGViewer, type ECGViewerHandle } from '../../../src/components/ECGViewer';
 import type { EcgRecord } from '../../../shared/ecgTypes';
-import { downloadUrl, loadEcg, type EcgFile } from './girderApi';
+import {
+  EXPORT_LABELS, downloadUrl, exportUrl, loadEcg, type EcgFile,
+} from './girderApi';
 
 type LoadState =
   | { status: 'loading' }
@@ -105,13 +107,33 @@ export function EcgPanel({ files }: { files: EcgFile[] }) {
           >
             <i className="icon-resize-full" />
           </button>
-          <a
-            className="btn btn-default g-ecg-download"
-            title="Download the original file"
-            href={downloadUrl(selected._id)}
-          >
-            <i className="icon-download" />
-          </a>
+          <div className="btn-group btn-group-sm">
+            <button
+              type="button"
+              className="btn btn-default dropdown-toggle g-ecg-download"
+              data-toggle="dropdown"
+              title="Download"
+            >
+              <i className="icon-download" /> <i className="icon-down-dir" />
+            </button>
+            <ul className="dropdown-menu dropdown-menu-right g-ecg-download-menu" role="menu">
+              <li role="presentation">
+                <a role="menuitem" href={downloadUrl(selected._id)}>
+                  Original file ({selected.formatLabel})
+                </a>
+              </li>
+              {selected.exports
+                // The original already is in its own format.
+                .filter((format) => format !== selected.format)
+                .map((format) => (
+                  <li role="presentation" key={format}>
+                    <a role="menuitem" href={exportUrl(selected._id, format)}>
+                      {EXPORT_LABELS[format]}
+                    </a>
+                  </li>
+                ))}
+            </ul>
+          </div>
         </div>
       </div>
       <div className="g-ecg-viewer-body">

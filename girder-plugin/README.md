@@ -14,39 +14,49 @@ Josselin Duchateau @ IHU Liryc
 When an item page opens, the plugin asks the server which of the item's files
 are ECGs and shows an **ECG** section above the item info:
 
-| Format | Recognised by | Converter |
-| --- | --- | --- |
-| DICOM 12-lead / General / Ambulatory ECG | SOP Class UID (`1.2.840.10008.5.1.4.1.1.9.1.{1,2,3}`) | — |
-| FDA HL7 v3 aECG XML | root element `AnnotatedECG` | `fda-to-dicom` |
-| Philips SierraECG XML | root element `restingecgdata` | `philips-to-dicom` |
-| GE MUSE XML | root element `RestingECG` | `muse-to-dicom` |
-| Mindray BeneHeart R12 | magic bytes `EB EC 12 34 20` | `mindray-to-dicom` |
-| Nihon Kohden (PEC) | `.DAT` extension | `nk-to-dicom` |
-| Fukuda Denshi | `.ECG` extension | `fukuda-to-dicom` |
+| Format | Recognised by | To DICOM | To FDA aECG |
+| --- | --- | --- | --- |
+| DICOM 12-lead / General / Ambulatory ECG | SOP Class UID (`1.2.840.10008.5.1.4.1.1.9.1.{1,2,3}`) | — | `dicom-to-fda` |
+| FDA HL7 v3 aECG XML | root element `AnnotatedECG` | `fda-to-dicom` | — |
+| Philips SierraECG XML | root element `restingecgdata` | `philips-to-dicom` | `philips-to-fda` |
+| GE MUSE XML | root element `RestingECG` | `muse-to-dicom` | `muse-to-fda` |
+| Mindray BeneHeart R12 | magic bytes `EB EC 12 34 20` | `mindray-to-dicom` | `mindray-to-fda` |
+| Nihon Kohden (PEC) | `.DAT` extension | `nk-to-dicom` | `nk-to-fda` |
+| Fukuda Denshi | `.ECG` extension | `fukuda-to-dicom` | `fukuda-to-fda` |
 
 - Recognition reads only the first 64 KB of files whose name or MIME type
   could be an ECG (`.dcm`, `.xml`, `.dat`, `.ecg`, `.pat`, no extension,
   UID-style names, DICOM/XML MIME types) and that are under 64 MB. It reads
   straight from the assetstore, so it does not count as a download.
-- A vendor format is offered only if its converter is installed on the server;
-  without ecg-bridge the plugin shows DICOM ECGs only.
+- A vendor format is offered only if its converter to DICOM is installed on
+  the server; without ecg-bridge the plugin shows DICOM ECGs only.
+- Every ECG can be downloaded as it is, as DICOM or as FDA HL7 aECG XML
+  (download menu of the section), as far as the converters are installed.
 - Several ECGs in one item → a selector in the section header; a badge shows
   the source format.
 - Toolbar: export the current view as PNG, clear calipers, fullscreen
-  (or <kbd>F</kbd>), download the original file.
+  (or <kbd>F</kbd>), download menu (original file, DICOM, FDA aECG).
 - The first 10 s of the recording are displayed. Missing limb leads (III, aVR,
   aVL, aVF) are derived from I and II.
 
 ### REST endpoints
 
-Both require read access, like a normal download.
+All require read access, like a normal download; the file routes also
+accept the session cookie, so they work as plain links.
 
 - `GET /item/{id}/ecg` — the item's ECG files: `_id`, `name`, `size`,
-  `format`, `formatLabel`, `converted`.
-- `GET /file/{id}/ecg` — the file as `application/dicom`: DICOM files
-  unchanged, other formats converted (counts as a download of the file). A
-  file that is not a recognised ECG, or fails to convert, gets a 400 with the
-  converter's error message.
+  `format`, `formatLabel`, `converted`, and `exports`, the formats each one
+  can be downloaded as (`dicom`, `fda`).
+- `GET /file/{id}/ecg` — the file as `application/dicom`, what the viewer
+  loads: DICOM files unchanged, other formats converted.
+- `GET /file/{id}/ecg/download?format=dicom|fda` — the file as an attachment,
+  as DICOM (`.dcm`, `application/dicom`) or FDA HL7 aECG (`.xml`,
+  `application/xml`): unchanged if it already is in that format, converted
+  otherwise. The download is named after the file (`ecg.DAT` → `ecg.xml`).
+
+Conversions count as downloads of the file (statistics, audit log). A file
+that is not a recognised ECG, or fails to convert, gets a 400 with the
+converter's error message.
 
 The browser parses the DICOM and renders it.
 
@@ -59,17 +69,18 @@ installed plugins automatically; the web client is pre-built and shipped in
 the wheel, there is no `girder build` step.
 
 ```bash
-pip install https://github.com/LIRYC-IHU/ecg-viewer/releases/download/girder-v0.2.0/girder_ecg_viewer-0.2.0-py3-none-any.whl
+pip install https://github.com/LIRYC-IHU/ecg-viewer/releases/download/girder-v0.3.0/girder_ecg_viewer-0.3.0-py3-none-any.whl
 ```
 
-For vendor formats, put the ecg-bridge `*-to-dicom` binaries (from its
+For vendor formats and exports, put the ecg-bridge `*-to-dicom` and
+`*-to-fda` binaries (from its
 [releases](https://github.com/LIRYC-IHU/ecg-bridge/releases)) on the server's
 `PATH`, or in a directory named by `ECG_BRIDGE_PATH` (a `PATH`-style list).
 In a Dockerfile based on the official image:
 
 ```dockerfile
 FROM girder/girder:v5.0.17-py3
-ARG ECG_VIEWER_VERSION=0.2.0
+ARG ECG_VIEWER_VERSION=0.3.0
 ARG ECG_BRIDGE_VERSION=1.4.0
 ARG TARGETARCH=amd64
 RUN set -eux; \
@@ -78,7 +89,7 @@ RUN set -eux; \
     cd /tmp; curl -fsSLO "$base/$tarball"; curl -fsSLO "$base/checksums.txt"; \
     grep " $tarball\$" checksums.txt | sha256sum -c -; \
     mkdir -p /opt/ecg-bridge/bin; \
-    tar -xzf "$tarball" --strip-components=1 -C /opt/ecg-bridge/bin --wildcards '*-to-dicom'; \
+    tar -xzf "$tarball" --strip-components=1 -C /opt/ecg-bridge/bin --wildcards '*-to-dicom' '*-to-fda'; \
     rm "$tarball" checksums.txt
 ENV ECG_BRIDGE_PATH=/opt/ecg-bridge/bin
 RUN pip install --no-cache-dir \
