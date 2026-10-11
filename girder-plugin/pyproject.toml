@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "girder-ecg-viewer"
+version = "0.1.0"
+description = "Display DICOM 12-lead ECGs on Girder item pages (WebGL viewer, calipers, PNG export)."
+readme = "README.md"
+license = {text = "Apache 2.0"}
+authors = [
+    {name = "Josselin Duchateau"},
+]
+keywords = ["girder", "ecg", "dicom", "waveform", "viewer"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "girder>=5",
+]
+
+[project.entry-points."girder.plugin"]
+ecg_viewer = "girder_ecg_viewer:EcgViewerPlugin"
+
+[project.urls]
+Homepage = "https://github.com/LIRYC-IHU/ecg-viewer"
+
+[tool.setuptools.packages.find]
+exclude = ["plugin_tests*"]
+
+[tool.setuptools.package-data]
+girder_ecg_viewer = [
+    "web_client/dist/girder-plugin-ecg-viewer.umd.cjs",
+    "web_client/dist/style.css",
+]

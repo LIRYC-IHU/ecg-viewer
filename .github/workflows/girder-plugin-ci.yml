@@ -1,0 +1,60 @@
+name: Girder plugin CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: girder-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Viewer tests, typecheck, plugin bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build:girder
+
+  python:
+    name: Plugin tests (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.13']
+    services:
+      mongo:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install girder and the plugin
+        # The web client is not built here: conftest.py writes placeholder
+        # dist files, which is all the static-content registration needs.
+        run: |
+          python -m pip install --upgrade pip
+          pip install "girder>=5" pytest pytest-girder
+          pip install -e ./girder-plugin
+
+      - name: Run the plugin test suite
+        working-directory: girder-plugin
+        run: pytest -q plugin_tests --mongo-uri mongodb://localhost:27017

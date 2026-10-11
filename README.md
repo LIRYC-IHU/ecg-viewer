@@ -71,6 +71,18 @@ npm run typecheck
 The demo app at <http://localhost:5173> auto-loads sample 1 and provides a
 header to switch between the bundled sample files or upload your own `.dcm`.
 
+## Girder plugin
+
+[`girder-plugin/`](girder-plugin/) packages the viewer as a **Girder 5**
+plugin: item pages holding a DICOM ECG get an ECG section with the full viewer
+(calipers, zoom, layouts, PNG export). Install the wheel from the
+[releases](https://github.com/LIRYC-IHU/ecg-viewer/releases) (`girder-v*`
+tags) — see [girder-plugin/README.md](girder-plugin/README.md).
+
+```bash
+npm run build:girder   # build the plugin's web client bundle
+```
+
 ## Using the React component
 
 ```tsx

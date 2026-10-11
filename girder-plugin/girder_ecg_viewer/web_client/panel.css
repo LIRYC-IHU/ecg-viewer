@@ -1,0 +1,72 @@
+/* ECG section on the Girder item page. Mirrors the look of the core
+   "Info" / "Files & links" sections it sits next to. */
+
+.g-ecg-viewer-panel {
+  margin: 10px 0 20px;
+}
+
+.g-ecg-viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.g-ecg-viewer-title {
+  font-size: 15px;
+  font-weight: bold;
+  color: #555;
+  white-space: nowrap;
+}
+
+.g-ecg-viewer-title .icon-heart {
+  color: #c9302c;
+}
+
+.g-ecg-viewer-file-name {
+  color: #777;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g-ecg-viewer-panel select.g-ecg-viewer-file-select {
+  width: auto;
+  max-width: 50%;
+}
+
+.g-ecg-viewer-actions {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* The viewer fills its parent and fits the page inside it, so the parent
+   needs a definite size. */
+.g-ecg-viewer-body {
+  display: flex;
+  height: min(70vh, 760px);
+  min-height: 320px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.g-ecg-viewer-body > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.g-ecg-viewer-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #777;
+}
+
+.g-ecg-viewer-error {
+  color: #a94442;
+  background: #f2dede;
+}

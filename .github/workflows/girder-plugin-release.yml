@@ -1,0 +1,120 @@
+name: Girder plugin release
+
+on:
+  push:
+    tags: ['girder-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (e.g. girder-v0.1.0)'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build wheel and sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Check the tag matches the packaged version
+        # A tag that disagrees with pyproject.toml would publish assets named
+        # after another version.
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          version=$(python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('girder-plugin/pyproject.toml').read_text())['project']['version'])")
+          if [ "$TAG" != "girder-v$version" ]; then
+            echo "::error::tag $TAG does not match version $version in girder-plugin/pyproject.toml"
+            exit 1
+          fi
+
+      - name: Test and build the web client
+        # The wheel ships the built bundle as package data (Girder 5 serves it
+        # straight from the installed package), so this runs first.
+        run: |
+          npm ci
+          npm test
+          npm run build:girder
+
+      - name: Build the distributions
+        working-directory: girder-plugin
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          twine check dist/*
+
+      - name: Check the bundle made it into the wheel
+        # A wheel without its web client installs cleanly and then fails at
+        # plugin load, so fail here instead.
+        working-directory: girder-plugin
+        run: |
+          python - <<'PY'
+          import pathlib, zipfile
+          wheel = next(pathlib.Path('dist').glob('*.whl'))
+          names = zipfile.ZipFile(wheel).namelist()
+          for expected in ('girder_ecg_viewer/web_client/dist/girder-plugin-ecg-viewer.umd.cjs',
+                           'girder_ecg_viewer/web_client/dist/style.css'):
+              assert expected in names, f'{expected} missing from {wheel.name}'
+          print(f'{wheel.name}: web client bundled')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: girder-plugin/dist/*
+          if-no-files-found: error
+
+  github-release:
+    name: Publish the GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: distributions
+          path: dist
+
+      - name: Create (or update) the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          version="${TAG#girder-v}"
+          notes=$(cat <<NOTES
+          Girder 5 plugin displaying DICOM ECGs on item pages.
+
+          Install into the Python environment running Girder 5, then restart Girder:
+
+          \`\`\`bash
+          pip install https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/girder_ecg_viewer-${version}-py3-none-any.whl
+          \`\`\`
+
+          See [girder-plugin/README.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/girder-plugin/README.md).
+          NOTES
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --title "Girder ECG Viewer plugin ${version}" \
+              --notes "$notes" \
+              --verify-tag
+          fi

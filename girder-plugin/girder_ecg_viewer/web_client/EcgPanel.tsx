@@ -1,0 +1,135 @@
+import { useEffect, useRef, useState } from 'react';
+import { ECGViewer, type ECGViewerHandle } from '../../../src/components/ECGViewer';
+import type { EcgRecord } from '../../../shared/ecgTypes';
+import { downloadUrl, loadEcg } from './girderApi';
+import { ECG_SOP_CLASSES, type EcgSopClassUid } from './sniff';
+
+export interface EcgFile {
+  id: string;
+  name: string;
+  sopClass: EcgSopClassUid;
+}
+
+type LoadState =
+  | { status: 'loading' }
+  | { status: 'ready'; record: EcgRecord }
+  | { status: 'error'; message: string };
+
+function pngName(fileName: string): string {
+  const dot = fileName.lastIndexOf('.');
+  return `${dot > 0 ? fileName.slice(0, dot) : fileName}.png`;
+}
+
+function saveDataUrl(url: string, name: string): void {
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+/** The ECG section shown on a Girder item page. */
+export function EcgPanel({ files }: { files: EcgFile[] }) {
+  const [selectedId, setSelectedId] = useState(files[0].id);
+  const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const viewerRef = useRef<ECGViewerHandle>(null);
+
+  const selected = files.find((f) => f.id === selectedId) ?? files[0];
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    setState({ status: 'loading' });
+    loadEcg(selected.id, ctrl.signal).then(
+      (record) => setState({ status: 'ready', record }),
+      (err: unknown) => {
+        if (ctrl.signal.aborted) return;
+        setState({
+          status: 'error',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      },
+    );
+    return () => ctrl.abort();
+  }, [selected.id]);
+
+  const ready = state.status === 'ready';
+
+  return (
+    <>
+      <div className="g-ecg-viewer-header">
+        <span className="g-ecg-viewer-title">
+          <i className="icon-heart" />
+          {' ECG'}
+        </span>
+        {files.length > 1 ? (
+          <select
+            className="g-ecg-viewer-file-select form-control input-sm"
+            value={selected.id}
+            onChange={(e) => setSelectedId(e.target.value)}
+          >
+            {files.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </select>
+        ) : (
+          <span className="g-ecg-viewer-file-name" title={ECG_SOP_CLASSES[selected.sopClass]}>
+            {selected.name}
+          </span>
+        )}
+        <div className="g-ecg-viewer-actions btn-group btn-group-sm">
+          <button
+            type="button"
+            className="btn btn-default g-ecg-export"
+            title="Export the current view as PNG"
+            disabled={!ready}
+            onClick={() => {
+              const url = viewerRef.current?.exportPng();
+              if (url) saveDataUrl(url, pngName(selected.name));
+            }}
+          >
+            <i className="icon-picture" /> PNG
+          </button>
+          <button
+            type="button"
+            className="btn btn-default g-ecg-clear-calipers"
+            title="Remove all calipers"
+            disabled={!ready}
+            onClick={() => viewerRef.current?.clearCalipers()}
+          >
+            <i className="icon-eraser" />
+          </button>
+          <button
+            type="button"
+            className="btn btn-default g-ecg-fullscreen"
+            title="Fullscreen (F)"
+            disabled={!ready}
+            onClick={() => viewerRef.current?.toggleFullscreen()}
+          >
+            <i className="icon-resize-full" />
+          </button>
+          <a
+            className="btn btn-default g-ecg-download"
+            title="Download the DICOM file"
+            href={downloadUrl(selected.id)}
+          >
+            <i className="icon-download" />
+          </a>
+        </div>
+      </div>
+      <div className="g-ecg-viewer-body">
+        {state.status === 'loading' && (
+          <div className="g-ecg-viewer-status">
+            <i className="icon-spin3 animate-spin" /> Loading ECG…
+          </div>
+        )}
+        {state.status === 'error' && (
+          <div className="g-ecg-viewer-status g-ecg-viewer-error">
+            <i className="icon-attention" /> Could not display this ECG: {state.message}
+          </div>
+        )}
+        {ready && <ECGViewer key={selected.id} ref={viewerRef} record={state.record} />}
+      </div>
+    </>
+  );
+}

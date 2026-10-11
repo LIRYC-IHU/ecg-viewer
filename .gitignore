@@ -5,3 +5,11 @@ dist
 .vite
 .claude
 assets
+
+# Girder plugin build outputs
+girder-plugin/girder_ecg_viewer/web_client/dist
+girder-plugin/build
+girder-plugin/*.egg-info
+__pycache__
+.pytest_cache
+*.tsbuildinfo

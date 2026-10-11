@@ -1,0 +1,33 @@
+# Local Girder 5 + MongoDB with the plugin installed (editable).
+#
+#   npm run build:girder                       # from the repository root
+#   docker compose -f girder-plugin/dev/docker-compose.yml up --build
+#
+# Then open http://localhost:8089 and register a first user (it becomes the
+# admin). Installed plugins are loaded automatically: upload a DICOM ECG
+# (e.g. server/samples/1.dcm) into an item and open the item page.
+services:
+  mongodb:
+    image: mongo:8.0
+    volumes:
+      - mongo-data:/data/db
+
+  girder:
+    build:
+      context: ..
+      dockerfile: dev/Dockerfile
+    platform: linux/amd64
+    depends_on:
+      - mongodb
+    ports:
+      - "8089:8080"
+    volumes:
+      - ..:/plugins/girder-ecg-viewer
+      - assetstore:/assetstore
+    # The image entrypoint is `girder serve`.
+    command: >
+      --host 0.0.0.0 --database mongodb://mongodb:27017/girder
+
+volumes:
+  mongo-data:
+  assetstore:

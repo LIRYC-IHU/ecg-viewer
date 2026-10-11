@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["girder-plugin/girder_ecg_viewer/web_client", "src", "shared", "server/parseDicomEcg.ts"],
+  "exclude": ["girder-plugin/girder_ecg_viewer/web_client/dist"]
+}

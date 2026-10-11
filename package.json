@@ -28,6 +28,7 @@
     "dev:server": "tsx watch server/index.ts",
     "build": "tsc -b && vite build",
     "build:lib": "vite build --config vite.config.lib.ts",
+    "build:girder": "vite build --config vite.config.girder.ts",
     "preview": "vite preview",
     "start:server": "tsx server/index.ts",
     "test": "vitest run",
