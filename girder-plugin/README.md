@@ -69,7 +69,7 @@ installed plugins automatically; the web client is pre-built and shipped in
 the wheel, there is no `girder build` step.
 
 ```bash
-pip install https://github.com/LIRYC-IHU/ecg-viewer/releases/download/girder-v0.3.0/girder_ecg_viewer-0.3.0-py3-none-any.whl
+pip install https://github.com/LIRYC-IHU/ecg-viewer/releases/download/girder-v0.3.1/girder_ecg_viewer-0.3.1-py3-none-any.whl
 ```
 
 For vendor formats and exports, put the ecg-bridge `*-to-dicom` and
@@ -80,7 +80,7 @@ In a Dockerfile based on the official image:
 
 ```dockerfile
 FROM girder/girder:v5.0.17-py3
-ARG ECG_VIEWER_VERSION=0.3.0
+ARG ECG_VIEWER_VERSION=0.3.1
 ARG ECG_BRIDGE_VERSION=1.4.0
 ARG TARGETARCH=amd64
 RUN set -eux; \
