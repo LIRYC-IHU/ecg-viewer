@@ -57,15 +57,20 @@ jobs:
 
       - name: Install the ecg-bridge converters
         # Vendor formats are converted with the ecg-bridge release binaries;
-        # the tests run a real conversion with them.
+        # the tests run a real conversion with them. The latest release by
+        # default, so a converter change shows up here; set a version (e.g.
+        # '1.4.1') to pin one.
         env:
-          ECG_BRIDGE_VERSION: '1.4.0'
+          ECG_BRIDGE_VERSION: latest
         run: |
-          base="https://github.com/LIRYC-IHU/ecg-bridge/releases/download/v${ECG_BRIDGE_VERSION}"
-          tarball="ecg-bridge_v${ECG_BRIDGE_VERSION}_linux_amd64.tar.gz"
+          releases="https://github.com/LIRYC-IHU/ecg-bridge/releases"
+          if [ "$ECG_BRIDGE_VERSION" = latest ]; then base="$releases/latest/download"
+          else base="$releases/download/v${ECG_BRIDGE_VERSION}"; fi
           cd "$RUNNER_TEMP"
-          curl -fsSLO "$base/$tarball"
           curl -fsSLO "$base/checksums.txt"
+          tarball=$(grep -o "ecg-bridge_v[^ ]*_linux_amd64\.tar\.gz" checksums.txt)
+          echo "Installing $tarball"
+          curl -fsSLO "$base/$tarball"
           grep " $tarball\$" checksums.txt | sha256sum -c -
           mkdir -p ecg-bridge
           tar -xzf "$tarball" --strip-components=1 -C ecg-bridge --wildcards '*-to-dicom' '*-to-fda'

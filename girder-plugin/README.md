@@ -81,16 +81,22 @@ In a Dockerfile based on the official image:
 ```dockerfile
 FROM girder/girder:v5.0.17-py3
 ARG ECG_VIEWER_VERSION=0.3.1
-ARG ECG_BRIDGE_VERSION=1.4.0
+# Latest ecg-bridge release, or a fixed one (--build-arg ECG_BRIDGE_VERSION=1.4.1).
+# The ADD rebuilds the layer below when a new release comes out.
+ARG ECG_BRIDGE_VERSION=latest
 ARG TARGETARCH=amd64
+ADD https://github.com/LIRYC-IHU/ecg-bridge/releases/latest/download/checksums.txt /tmp/ecg-bridge-latest.txt
 RUN set -eux; \
-    base="https://github.com/LIRYC-IHU/ecg-bridge/releases/download/v${ECG_BRIDGE_VERSION}"; \
-    tarball="ecg-bridge_v${ECG_BRIDGE_VERSION}_linux_${TARGETARCH}.tar.gz"; \
-    cd /tmp; curl -fsSLO "$base/$tarball"; curl -fsSLO "$base/checksums.txt"; \
+    releases="https://github.com/LIRYC-IHU/ecg-bridge/releases"; \
+    if [ "$ECG_BRIDGE_VERSION" = latest ]; then base="$releases/latest/download"; \
+    else base="$releases/download/v${ECG_BRIDGE_VERSION}"; fi; \
+    cd /tmp; curl -fsSLO "$base/checksums.txt"; \
+    tarball=$(grep -o "ecg-bridge_v[^ ]*_linux_${TARGETARCH}\.tar\.gz" checksums.txt); \
+    curl -fsSLO "$base/$tarball"; \
     grep " $tarball\$" checksums.txt | sha256sum -c -; \
     mkdir -p /opt/ecg-bridge/bin; \
     tar -xzf "$tarball" --strip-components=1 -C /opt/ecg-bridge/bin --wildcards '*-to-dicom' '*-to-fda'; \
-    rm "$tarball" checksums.txt
+    rm "$tarball" checksums.txt ecg-bridge-latest.txt
 ENV ECG_BRIDGE_PATH=/opt/ecg-bridge/bin
 RUN pip install --no-cache-dir \
   "https://github.com/LIRYC-IHU/ecg-viewer/releases/download/girder-v${ECG_VIEWER_VERSION}/girder_ecg_viewer-${ECG_VIEWER_VERSION}-py3-none-any.whl"
