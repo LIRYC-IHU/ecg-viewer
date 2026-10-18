@@ -5,7 +5,7 @@ import type { EcgChannel, EcgRecord } from '../shared/ecgTypes.ts';
 /**
  * Parse a DICOM Resting 12-Lead ECG (SOP class 1.2.840.10008.5.1.4.1.1.9.1.1).
  * Returns a record with 12 channels in standard order, samples expressed in mV.
- * Missing limb leads (III, aVR, aVL, aVF) are derived from I and II.
+ * Missing or flat (all-zero) limb leads are derived from two of I, II and III.
  */
 export function parseDicomEcg(input: ArrayBuffer | Uint8Array): EcgRecord {
   const byteArray = input instanceof Uint8Array ? input : new Uint8Array(input);
@@ -117,13 +117,24 @@ export function parseDicomEcg(input: ArrayBuffer | Uint8Array): EcgRecord {
     return { label: meta.label, samples };
   });
 
-  const byLabel = new Map<string, EcgChannel>();
-  for (const ch of channelsRaw) byLabel.set(ch.label, ch);
+  // Some converters emit every standard channel even when the source lacked
+  // it, filled with zeros (ecg-bridge does so for unrecognised lead codes such
+  // as MDC_ECG_LEAD_aVR): a flat channel only stands in when nothing better can
+  // be derived.
+  const measured = new Map<string, EcgChannel>();
+  const flat = new Map<string, EcgChannel>();
+  for (const ch of channelsRaw) {
+    const target = isFlat(ch.samples) ? flat : measured;
+    if (!target.has(ch.label)) target.set(ch.label, ch);
+  }
 
-  const finalChannels: EcgChannel[] = STANDARD_LEADS_12.map((leadName) => {
-    if (byLabel.has(leadName)) return byLabel.get(leadName)!;
-    return deriveLead(leadName, byLabel, numSamples);
-  });
+  const finalChannels: EcgChannel[] = STANDARD_LEADS_12.map(
+    (leadName) =>
+      measured.get(leadName) ??
+      deriveLimbLead(leadName, measured, numSamples) ??
+      flat.get(leadName) ??
+      missingLead(leadName),
+  );
 
   const durationSec = numSamples / samplingFrequency;
 
@@ -137,36 +148,62 @@ export function parseDicomEcg(input: ArrayBuffer | Uint8Array): EcgRecord {
   };
 }
 
-function deriveLead(
+/** Limb leads as functions of I and II (Einthoven's and Goldberger's laws). */
+const LIMB_LEADS_FROM_I_II: Record<string, (i: number, ii: number) => number> = {
+  I: (i) => i,
+  II: (_i, ii) => ii,
+  III: (i, ii) => ii - i,
+  aVR: (i, ii) => -(i + ii) * 0.5,
+  aVL: (i, ii) => i - ii * 0.5,
+  aVF: (i, ii) => ii - i * 0.5,
+};
+
+/**
+ * Derive a limb lead from any two of I, II and III; null if `leadName` is not a
+ * limb lead or fewer than two of those were measured.
+ */
+function deriveLimbLead(
   leadName: string,
-  byLabel: Map<string, EcgChannel>,
+  measured: Map<string, EcgChannel>,
   n: number,
-): EcgChannel {
-  const I = byLabel.get('I');
-  const II = byLabel.get('II');
-  if (!I || !II) {
+): EcgChannel | null {
+  const formula = LIMB_LEADS_FROM_I_II[leadName];
+  if (!formula) return null;
+  let I = measured.get('I')?.samples;
+  let II = measured.get('II')?.samples;
+  const III = measured.get('III')?.samples;
+  if (!I && II && III) I = combine(n, II, III, (ii, iii) => ii - iii);
+  if (!II && I && III) II = combine(n, I, III, (i, iii) => i + iii);
+  if (!I || !II) return null;
+  return { label: leadName, samples: combine(n, I, II, formula) };
+}
+
+function combine(
+  n: number,
+  a: Float32Array,
+  b: Float32Array,
+  f: (a: number, b: number) => number,
+): Float32Array {
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) out[i] = f(a[i], b[i]);
+  return out;
+}
+
+/** Whether every sample has the same value (an empty placeholder channel). */
+function isFlat(samples: Float32Array): boolean {
+  for (let i = 1; i < samples.length; i++) {
+    if (samples[i] !== samples[0]) return false;
+  }
+  return true;
+}
+
+function missingLead(leadName: string): never {
+  if (leadName in LIMB_LEADS_FROM_I_II) {
     throw new Error(
-      `Dérivation ${leadName} absente et impossible à dériver (I et II requises).`,
+      `Dérivation ${leadName} absente et impossible à dériver (deux voies parmi I, II et III requises).`,
     );
   }
-  const samples = new Float32Array(n);
-  switch (leadName) {
-    case 'III':
-      for (let i = 0; i < n; i++) samples[i] = II.samples[i] - I.samples[i];
-      break;
-    case 'aVR':
-      for (let i = 0; i < n; i++) samples[i] = -(I.samples[i] + II.samples[i]) * 0.5;
-      break;
-    case 'aVL':
-      for (let i = 0; i < n; i++) samples[i] = I.samples[i] - II.samples[i] * 0.5;
-      break;
-    case 'aVF':
-      for (let i = 0; i < n; i++) samples[i] = II.samples[i] - I.samples[i] * 0.5;
-      break;
-    default:
-      throw new Error(`Dérivation ${leadName} absente du fichier.`);
-  }
-  return { label: leadName, samples };
+  throw new Error(`Dérivation ${leadName} absente du fichier.`);
 }
 
 function normalizeLeadName(raw: string): string {
@@ -179,9 +216,9 @@ function normalizeLeadName(raw: string): string {
     avl: 'aVL',
     avf: 'aVF',
     v1: 'V1', v2: 'V2', v3: 'V3', v4: 'V4', v5: 'V5', v6: 'V6',
-    einthovenI: 'I',
-    einthovenII: 'II',
-    einthovenIII: 'III',
+    einthoveni: 'I',
+    einthovenii: 'II',
+    einthoveniii: 'III',
   };
   return map[s] ?? raw.trim();
 }

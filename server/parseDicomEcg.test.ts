@@ -72,4 +72,28 @@ describe('parseDicomEcg', () => {
       });
     });
   }
+
+  // ecg-bridge 1.4.0 converted this FDA aECG, whose augmented leads are coded
+  // MDC_ECG_LEAD_aVR/aVL/aVF, into a DICOM whose aVR, aVL and aVF are all zeros.
+  describe('flat augmented leads', () => {
+    const rec = parseSample('flat-augmented');
+    const lead = (name: string) => rec.channels[STANDARD_LEADS.indexOf(name as never)].samples;
+
+    it('derives aVR, aVL and aVF from I and II instead of keeping the zeros', () => {
+      const I = lead('I');
+      const II = lead('II');
+      for (const name of ['aVR', 'aVL', 'aVF']) {
+        expect(lead(name).some((v) => v !== 0)).toBe(true);
+      }
+      for (const idx of [0, 50, 100, 500, 1000]) {
+        expect(lead('aVR')[idx]).toBeCloseTo(-(I[idx] + II[idx]) / 2, 5);
+        expect(lead('aVL')[idx]).toBeCloseTo(I[idx] - II[idx] / 2, 5);
+        expect(lead('aVF')[idx]).toBeCloseTo(II[idx] - I[idx] / 2, 5);
+      }
+    });
+
+    it('keeps the measured leads', () => {
+      expect(Math.max(...lead('V3'))).toBeGreaterThan(0.5);
+    });
+  });
 });
